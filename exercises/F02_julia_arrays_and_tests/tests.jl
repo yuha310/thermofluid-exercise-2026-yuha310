@@ -1,9 +1,13 @@
+# F02の課題テスト。提供済みの必須確認 → 受講生が追加する自作テストの順に読みます。
+# 必須テストの期待値は保持し、自作テストのTODOを編集します。
+
 using Test
 
 if !isdefined(Main, :F02JuliaArraysAndTests)
     include(joinpath(@__DIR__, "run.jl"))
 end
 
+# 提供済みの期待値を使い、実装と独立した基準で確認する。
 @testset "F02 必須テスト（配布済み）" begin
     values = [5.0, 7.0, 12.0]
     original = copy(values)
@@ -18,6 +22,7 @@ end
     @test_throws ArgumentError F02JuliaArraysAndTests.mean_temperature(Float64[])
 end
 
+# 必須テストが扱わない条件を選び、期待値を自分で決める。
 @testset "F02 自作テスト" begin
     values = [7.0, 13.0, 4.0]
     anomalies = F02JuliaArraysAndTests.temperature_anomaly(values)

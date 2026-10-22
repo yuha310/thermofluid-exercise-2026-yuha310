@@ -72,7 +72,7 @@ using .F04NumericalDifferentiation
         coarse = verify_vector_identities(9)
         fine = verify_vector_identities(17)
         @test keys(coarse) ==
-              (:curl_gradient, :divergence_curl, :product_divergence, :curl_curl)
+            (:curl_gradient, :divergence_curl, :product_divergence, :curl_curl)
         for key in keys(coarse)
             @test 0 < fine[key] < coarse[key]
             @test 3.0 <= coarse[key] / fine[key] <= 4.8
@@ -82,6 +82,7 @@ end
 
 # 必須テストが扱わない条件を選び、期待値を自分で決める。
 @testset "F03-F04 自作テスト" begin
-    # TODO(自作): 別の関数、評価点、または入力条件を選び、どの実装ミスを検出するか説明できるテストを一つ書く。F03単独の別テストは作らない。
-    @test false
+    quadratic_3d(point) = point[1]^2 + 2 * point[2]^2 + 3 * point[3]^2
+
+    @test centered_partial(quadratic_3d, (1.0, 2.0, 3.0), 2, 0.1) ≈ 8.0
 end

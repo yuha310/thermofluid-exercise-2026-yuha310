@@ -44,7 +44,7 @@ CFL = 0.5
 overshoot_occurred = false，undershoot_occurred = falseよりオバーシュート・アンダーシュート共に起こっていない．
 
 中心差分＋陽Euler
-最小値 = -10.420010468371677 ，最大値 = 11.492726642559711
+最小値 = -10.420010468371677 ，最大値 = 13.492726642559711
 overshoot_occurred = true，undershoot_occurred = trueよりオバーシュート・アンダーシュート共に起こった．
 
 - 図：[風上差分](results/upwind.png)、[中心差分＋陽Euler](results/centered-euler.png)

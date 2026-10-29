@@ -4,7 +4,7 @@
 using Test
 
 # 単独実行時は読み込み、Pkg.test などで読込済みなら既存のモジュールを使う。
-if !isdefined(Main,:N03Diffusion)
+if !isdefined(Main, :N03Diffusion)
     include(joinpath(@__DIR__, "run.jl"))
 end
 import .N03Diffusion
@@ -61,9 +61,35 @@ end
 @testset "N03 自作テスト" begin
     # TODO(自作): 非対称な非定数配列を複数ステップ進め、断熱の台形則熱量保存を確認する。
     # 初期熱量を独立に計算し、点数・ステップ数・値の大きさから許容誤差を決める。
-    @test false
+    u = [0.8, 1.1, 1.7, 1.3, 0.9]
+    u_new = similar(u)
+    initial_heat = N03Diffusion.thermal_content(u, 0.5)
+
+    for _ in 1:20
+        N03Diffusion.diffusion_step!(u_new, u, 0.05, 0.5, 1.0; boundary=:insulated)
+        u, u_new = u_new, u
+    end
+
+    final_heat = N03Diffusion.thermal_content(u, 0.5)
+    @test isapprox(final_heat, initial_heat; atol=1e-12, rtol=1e-12)
 
     # TODO(自作): 固定温度の正弦解析解と41・81・161点の数値解を同時刻・同じfoで比較する。
     # 誤差の減少と観測次数を確認し、指標・許容範囲・検出限界を説明する。
-    @test false
+    errors = Float64[]
+
+    for nx in (41, 81, 161)
+        result = N03Diffusion.simulate(;
+            boundary=:fixed, nx, fo=0.4, t_final=0.1, initial=:mode,
+        )
+        exact = N03Diffusion.analytic_solution(
+            result.x, result.t_final; boundary=:fixed,
+        )
+        push!(errors, maximum(abs.(result.u .- exact)))
+    end
+
+    @test errors[2] < errors[1]
+    @test errors[3] < errors[2]
+
+    orders = log.(errors[1:(end-1)] ./ errors[2:end]) ./ log(2)
+    @test all(1.8 .< orders .< 2.2)
 end

@@ -17,7 +17,7 @@ using .N02NonlinearAdvection
         old = [1., 2., 1., 1.]
         saved = copy(old)
         new = similar(old)
-        nonlinear_upwind_step!(new, old, 0.25, 1.; boundary = :periodic)
+        nonlinear_upwind_step!(new, old, 0.25, 1.; boundary=:periodic)
         @test new == [1., 1.625, 1.375, 1.]
         @test old == saved
     end
@@ -39,8 +39,8 @@ using .N02NonlinearAdvection
             # c=1で同じ最終時刻まで移した矩形との離散L1差。周期では左右をつなぐ。
             shifted = [
                 0.5 <=
-                (boundary == :periodic ? mod(x - r.t_final, 2.) : x - r.t_final) <=
-                1.0 ? 2. : 1. for x in r.x
+                    (boundary == :periodic ? mod(x - r.t_final, 2.) : x - r.t_final) <=
+                    1.0 ? 2. : 1. for x in r.x
             ]
             @test r.dx * sum(abs.(r.u - shifted)) > 0.2
             @test maximum(r.u[findall(>(1.5), r.x)]) > 1.2
@@ -49,7 +49,25 @@ using .N02NonlinearAdvection
 end
 @testset "N02 自作テスト" begin
     # TODO(自作): 周期の非定数・非負配列を複数ステップ進め、離散総和保存を確認する。入力・許容誤差・期待値を自分で決める。
-    @test false
+    u = [0.8, 1.1, 1.7, 1.3, 0.9]
+    u_next = similar(u)
+    initial_sum = sum(u)
+
+    for _ in 1:5
+        nonlinear_upwind_step!(u_next, u, 0.05, 1.0; boundary=:periodic)
+        u, u_next = u_next, u
+        @test sum(u) ≈ initial_sum atol = 1e-12
+    end
     # TODO(自作): 周期1ステップSについてS(circshift(u,k)) ≈ circshift(S(u),k)を確認する。非対称な非定数配列、k≠0、同じdtとdxを使う。
-    @test false
+    u = [0.8, 1.1, 1.7, 1.3, 0.9]
+    k = 2
+
+    shifted_u = circshift(u, k)
+    result = similar(u)
+    shifted_result = similar(u)
+
+    nonlinear_upwind_step!(result, u, 0.05, 1.0; boundary=:periodic)
+    nonlinear_upwind_step!(shifted_result, shifted_u, 0.05, 1.0; boundary=:periodic)
+
+    @test shifted_result ≈ circshift(result, k)
 end

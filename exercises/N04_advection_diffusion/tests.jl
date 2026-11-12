@@ -29,7 +29,7 @@ N04.validate_model(N04.SELECTED_MODEL)
     @testset "移流・拡散をゼロにした極限" begin
         old = [1., 2., 4., 3.]
         new = similar(old)
-        N04.advection_diffusion_step!(new, old, 0.1, 1., 0.2; advection = false)
+        N04.advection_diffusion_step!(new, old, 0.1, 1., 0.2; advection=false)
         @test new ≈ [1.06, 2.02, 3.94, 2.98]
         N04.advection_diffusion_step!(new, old, 0.1, 1., 0.)
         @test new ≈ (model == :linear ? [1.2, 1.9, 3.8, 3.1] : [1.4, 1.85, 3.4, 3.35])
@@ -44,9 +44,63 @@ N04.validate_model(N04.SELECTED_MODEL)
 end
 @testset "N04 自作テスト" begin
     # TODO(自作): 非対称な非定数配列を複数ステップ進め、周期積分の保存を確認する。
+    initial = [0.4, 1.3, 0.7, 1.8, 0.9, 1.1, 1.5, 0.6]
     # 初期積分を独立に計算し、点数・ステップ数・値の大きさから許容誤差を説明する。
-    @test false # TODO(N04): 複数ステップ保存
+    old = copy(initial)
+    new = similar(old)
+
+    dx = 2 / length(initial)
+    initial_integral = dx * sum(initial)
+
+    for _ in 1:20
+        N04.advection_diffusion_step!(
+            new, old, 0.005, dx, 0.1;
+            model=N04.SELECTED_MODEL,
+            speed=1.0,
+        )
+        old, new = new, old
+    end
+
+    final_integral = dx * sum(old)
+
+    # TODO(N04): 複数ステップ保存
+    @test isapprox(final_integral, initial_integral; atol=1e-12, rtol=1e-12)
+
     # TODO(自作): 選択モデルの解析解と40・80・160点の誤差・観測次数を確認する。
     # 誤差の指標、同じ最終時刻、0.8〜1.2の次数範囲、検出できない誤りも説明する。
-    @test false # TODO(N04): 格子収束
+    errors = Float64[]
+    for nx in (40, 80, 160)
+        result = N04.simulate(;
+            model=N04.SELECTED_MODEL,
+            nx,
+            diffusivity=0.1,
+            speed=1.0,
+            t_final=1.0,
+            initial=:mode,
+        )
+
+        exact = N04.analytic_solution(
+            result.x,
+            result.t_final;
+            model=N04.SELECTED_MODEL,
+            diffusivity=0.1,
+            speed=1.0,
+        )
+
+        # 各格子点の誤差を二乗平均平方根（RMS誤差）でまとめる。
+        error = sqrt(sum(abs2, result.u .- exact) / length(result.u))
+        push!(errors, error)
+    end
+
+    # 格子幅を半分にしたときの観測次数を計算する。
+    order_40_80 = log2(errors[1] / errors[2])
+    order_80_160 = log2(errors[2] / errors[3])
+
+    # TODO(N04): 格子収束
+    # 誤差が計算できていて、正の有限値であることを確認する。
+    @test all(e -> isfinite(e) && e > 0, errors)
+
+    # 課題で指定された範囲に入ることを確認する。
+    @test 0.8 <= order_40_80 <= 1.2
+    @test 0.8 <= order_80_160 <= 1.2
 end

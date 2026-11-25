@@ -1,0 +1,9 @@
+color_limits = [0.4, 1.6]
+colormap = "viridis"
+display_case = "n080x060"
+error_colormap = "RdBu"
+mass_display_scale = 1.0e-15
+schema_version = 1
+source_fields_sha256 = "5a0c56bb8deb26b1d10bc21e4c82713ac0db446ba59490bb7a474c7613e1597b"
+source_summary_sha256 = "ac55c6a7db65c5e6d899f026aca2e401069824a6191b651d6d3a9e6784063059"
+time = [0.0, 1.0]

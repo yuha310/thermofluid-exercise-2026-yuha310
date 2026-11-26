@@ -68,9 +68,9 @@ const SIDES = (:west, :east, :south, :north)
 
 検証済みの境界NamedTuple。
 """
-function boundaries(kind::Symbol; value = 0.0)
-    b = (; kind, value = Float64(value))
-    bc = (; west = b, east = b, south = b, north = b)
+function boundaries(kind::Symbol; value=0.0)
+    b = (; kind, value=Float64(value))
+    bc = (; west=b, east=b, south=b, north=b)
 
     # 計算や書込みの前に、入力条件をまとめて確認する。
     validate_boundary(bc, 0., 0.)
@@ -93,10 +93,10 @@ west,east,south,northの境界NamedTuple。
 function channel_boundaries(wall::Symbol)
     require(wall in (:dirichlet, :insulated), "上下壁は固定温度または断熱です")
     (;
-        west = (; kind = :inflow, value = 1.),
-        east = (; kind = :outflow, value = 0.),
-        south = (; kind = wall, value = 0.),
-        north = (; kind = wall, value = 0.),
+        west=(; kind=:inflow, value=1.),
+        east=(; kind=:outflow, value=0.),
+        south=(; kind=wall, value=0.),
+        north=(; kind=wall, value=0.),
     )
 end
 
@@ -178,7 +178,7 @@ end
 
 nothing。
 """
-function thermal_parameters(cx, cy, kappa, dx, dy, bc; safety = 1.)
+function thermal_parameters(cx, cy, kappa, dx, dy, bc; safety=1.)
     # 計算や書込みの前に、入力条件をまとめて確認する。
     require(all(finite, (cx, cy, kappa)) && kappa >= 0, "速度は有限、kappaは有限非負です")
     positive(dx, "dx")
@@ -202,7 +202,7 @@ end
 
 old=trueではnothing、old=falseではfalse。
 """
-function matrix(a; old = false)
+function matrix(a; old=false)
     # 計算や書込みの前に、入力条件をまとめて確認する。
     require(
         a isa AbstractMatrix{<:AbstractFloat} && all(>=(3), size(a)),
@@ -226,7 +226,7 @@ end
 nothing。
 """
 function independent(arrays)
-    for i in eachindex(arrays), j in (i + 1):length(arrays)
+    for i in eachindex(arrays), j in (i+1):length(arrays)
         require(!Base.mightalias(arrays[i], arrays[j]), "配列は互いに非aliasです")
     end
 end
@@ -248,7 +248,7 @@ nothing。旧場は有限値を求める。
 function thermal_buffers(new, old)
     # 計算や書込みの前に、入力条件をまとめて確認する。
     matrix(new)
-    matrix(old; old = true)
+    matrix(old; old=true)
     require(size(new) == size(old), "新旧の形状が異なります")
     independent((new, old))
 end
@@ -273,10 +273,10 @@ function flux_buffers(T)
     matrix(T)
     nx, ny = size(T)
     (;
-        adv_x = zeros(nx + 1, ny),
-        diff_x = zeros(nx + 1, ny),
-        adv_y = zeros(nx, ny + 1),
-        diff_y = zeros(nx, ny + 1),
+        adv_x=zeros(nx + 1, ny),
+        diff_x=zeros(nx + 1, ny),
+        adv_y=zeros(nx, ny + 1),
+        diff_y=zeros(nx, ny + 1),
     )
 end
 
@@ -296,7 +296,7 @@ nothing。温度を含む全配列が独立することを求める。
 """
 function validate_fluxes(f, T)
     # 計算や書込みの前に、入力条件をまとめて確認する。
-    matrix(T; old = true)
+    matrix(T; old=true)
     nx, ny = size(T)
     require(
         f isa NamedTuple && keys(f) == (:adv_x, :diff_x, :adv_y, :diff_y),
@@ -390,12 +390,12 @@ end
 境界・係数の検証、全係数0の拒否と返却刻みの検証は提供済み。thermal_rateは上限の照合用である。
 [N07課題「温度の流束・更新・境界条件」](https://t2lab-it.github.io/thermofluid-exercise-2026/assignments/N07.html#discretization)の安定刻みを参照する。配布状態では刻みの未実装エラーで停止する。
 """
-function thermal_stable_timestep(cx, cy, kappa, dx, dy, bc; safety = 0.8)
+function thermal_stable_timestep(cx, cy, kappa, dx, dy, bc; safety=0.8)
     # 計算や書込みの前に、入力条件をまとめて確認する。
     thermal_parameters(cx, cy, kappa, dx, dy, bc; safety)
     require(thermal_rate(cx, cy, kappa, dx, dy, bc) > 0, "全係数0では刻みを決められません")
     # TODO(N07): 半セル境界を含む合成上限から時間刻みを求める。
-    dt = error("未実装 N07: thermal_stable_timestep")
+    dt = safety / thermal_rate(cx, cy, kappa, dx, dy, bc)
     checked_timestep(dt)
 end
 
@@ -434,7 +434,100 @@ function thermal_fluxes!(fluxes, T, dx, dy; cx, cy, kappa, bc)
     thermal_parameters(cx, cy, kappa, dx, dy, bc)
     validate_fluxes(fluxes, T)
     # TODO(N07): 正x・正y方向、移流と拡散を分けて全ての面へ書く。
-    error("未実装 N07: thermal_fluxes!")
+    nx, ny = size(T)
+
+    fill!(fluxes.adv_x, 0.)
+    fill!(fluxes.diff_x, 0.)
+    fill!(fluxes.adv_y, 0.)
+    fill!(fluxes.diff_y, 0.)
+
+    for j in 1:ny, i in 1:(nx - 1)
+        face = i + 1
+        upwind = cx >= 0 ? T[i, j] : T[i + 1, j]
+
+        fluxes.adv_x[face, j] = cx * upwind
+        fluxes.diff_x[face, j] =
+            -kappa * (T[i + 1, j] - T[i, j]) / dx
+    end
+
+    for i in 1:nx, j in 1:(ny - 1)
+        face = j + 1
+        upwind = cy >= 0 ? T[i, j] : T[i, j + 1]
+
+        fluxes.adv_y[i, face] = cy * upwind
+        fluxes.diff_y[i, face] =
+            -kappa * (T[i, j + 1] - T[i, j]) / dy
+    end
+
+    if bc.west.kind == :periodic
+        for j in 1:ny
+            upwind = cx >= 0 ? T[nx, j] : T[1, j]
+
+            fluxes.adv_x[1, j] =
+                cx * upwind
+            fluxes.diff_x[1, j] =
+                -kappa * (T[1, j] - T[nx, j]) / dx
+
+            fluxes.adv_x[nx + 1, j] =
+                fluxes.adv_x[1, j]
+            fluxes.diff_x[nx + 1, j] =
+                fluxes.diff_x[1, j]
+        end
+    elseif bc.west.kind == :inflow
+        for j in 1:ny
+            fluxes.adv_x[1, j] =
+                cx * bc.west.value
+            fluxes.diff_x[1, j] =
+                -2kappa * (T[1, j] - bc.west.value) / dx
+        end
+    elseif bc.west.kind == :dirichlet
+        for j in 1:ny
+            fluxes.diff_x[1, j] =
+                -2kappa * (T[1, j] - bc.west.value) / dx
+        end
+    end
+
+    if bc.east.kind == :outflow
+        for j in 1:ny
+            fluxes.adv_x[nx + 1, j] =
+                cx * T[nx, j]
+        end
+    elseif bc.east.kind == :dirichlet
+        for j in 1:ny
+            fluxes.diff_x[nx + 1, j] =
+                2kappa * (T[nx, j] - bc.east.value) / dx
+        end
+    end
+
+    if bc.south.kind == :periodic
+        for i in 1:nx
+            upwind =
+                cy >= 0 ? T[i, ny] : T[i, 1]
+
+            fluxes.adv_y[i, 1] =
+                cy * upwind
+            fluxes.diff_y[i, 1] =
+                -kappa * (T[i, 1] - T[i, ny]) / dy
+
+            fluxes.adv_y[i, ny + 1] =
+                fluxes.adv_y[i, 1]
+            fluxes.diff_y[i, ny + 1] =
+                fluxes.diff_y[i, 1]
+        end
+    elseif bc.south.kind == :dirichlet
+        for i in 1:nx
+            fluxes.diff_y[i, 1] =
+                -2kappa * (T[i, 1] - bc.south.value) / dy
+        end
+    end
+
+    if bc.north.kind == :dirichlet
+        for i in 1:nx
+            fluxes.diff_y[i, ny + 1] =
+                2kappa * (T[i, ny] - bc.north.value) / dy
+        end
+    end
+
     fluxes
 end
 
@@ -474,7 +567,39 @@ function thermal_step!(Tnew, Told, dt, dx, dy; cx, cy, kappa, bc)
     rate = thermal_rate(cx, cy, kappa, dx, dy, bc)
     require(dt * rate <= 1 + 32eps(Float64), "温度の安定上限を超えています")
     # TODO(N07): Common.validate_buffersも再利用し、同じ旧場の面流束を一度構築して更新と辺別レートに使う。
-    error("未実装 N07: thermal_step!")
+    fluxes = flux_buffers(Told)
+    thermal_fluxes!(fluxes, Told, dx, dy; cx, cy, kappa, bc)
+
+    nx, ny = size(Told)
+
+    for j in 1:ny, i in 1:nx
+        divergence_x =
+            (fluxes.adv_x[i + 1, j] - fluxes.adv_x[i, j]) / dx +
+            (fluxes.diff_x[i + 1, j] - fluxes.diff_x[i, j]) / dx
+
+        divergence_y =
+            (fluxes.adv_y[i, j + 1] - fluxes.adv_y[i, j]) / dy +
+            (fluxes.diff_y[i, j + 1] - fluxes.diff_y[i, j]) / dy
+
+        Tnew[i, j] =
+            Told[i, j] - dt * (divergence_x + divergence_y)
+    end
+
+    advective = (;
+        west = dy * sum(fluxes.adv_x[1, :]),
+        east = -dy * sum(fluxes.adv_x[nx + 1, :]),
+        south = dx * sum(fluxes.adv_y[:, 1]),
+        north = -dx * sum(fluxes.adv_y[:, ny + 1]),
+    )
+
+    diffusive = (;
+        west = dy * sum(fluxes.diff_x[1, :]),
+        east = -dy * sum(fluxes.diff_x[nx + 1, :]),
+        south = dx * sum(fluxes.diff_y[:, 1]),
+        north = -dx * sum(fluxes.diff_y[:, ny + 1]),
+    )
+
+    (; temperature = Tnew, boundary_rates = (; advective, diffusive))
 end
 
 """
@@ -495,10 +620,10 @@ end
 
 成功時はnothing。
 """
-function burgers_parameters(u, v, nu, dx, dy; safety = 1.)
+function burgers_parameters(u, v, nu, dx, dy; safety=1.)
     # 計算や書込みの前に、入力条件をまとめて確認する。
-    matrix(u; old = true)
-    matrix(v; old = true)
+    matrix(u; old=true)
+    matrix(v; old=true)
     require(size(u) == size(v), "二成分の形状が異なります")
     independent((u, v))
     require(finite(nu) && nu >= 0, "nuは有限非負です")
@@ -528,7 +653,7 @@ end
 function burgers_rate(u, v, nu, dx, dy)
     r =
         maximum(abs(u[k]) / dx + abs(v[k]) / dy for k in eachindex(u, v)) +
-        2nu * (1 / dx ^ 2 + 1 / dy ^ 2)
+            2nu * (1 / dx ^ 2 + 1 / dy ^ 2)
 
     # 計算や書込みの前に、入力条件をまとめて確認する。
     require(isfinite(r), "安定条件が表現範囲外です")
@@ -561,12 +686,12 @@ end
 旧行列・粘性・格子幅の検証、全速度・粘性0の拒否と返却刻みの検証は提供済み。u,vを保持する。
 [N07課題「Burgersの定式化」](https://t2lab-it.github.io/thermofluid-exercise-2026/assignments/N07.html#burgers-formulation)を参照する。配布状態では刻みの未実装エラーで停止する。
 """
-function burgers_stable_timestep(u, v, nu, dx, dy; safety = 0.8)
+function burgers_stable_timestep(u, v, nu, dx, dy; safety=0.8)
     # 計算や書込みの前に、入力条件をまとめて確認する。
     burgers_parameters(u, v, nu, dx, dy; safety)
     require(burgers_rate(u, v, nu, dx, dy) > 0, "全速度・粘性0では刻みを決められません")
     # TODO(N07): このステップの旧場の局所速度から合成刻みを決める。
-    dt = error("未実装 N07: burgers_stable_timestep")
+    dt = safety / burgers_rate(u, v, nu, dx, dy)
     checked_timestep(dt)
 end
 
@@ -609,8 +734,37 @@ function burgers_step!(unew, vnew, uold, vold, dt, dx, dy; nu)
         dt * burgers_rate(uold, vold, nu, dx, dy) <= 1 + 32eps(Float64),
         "Burgersの安定上限を超えています",
     )
-    # TODO(N07): Common.validate_buffersと周期添字を再利用し、正負風上と拡散で二成分を同じ旧場から更新する。
-    error("未実装 N07: burgers_step!")
-    (; u = unew, v = vnew)
+    nx, ny = size(uold)
+    invdx2 = 1 / dx ^ 2
+    invdy2 = 1 / dy ^ 2
+
+    for j in 1:ny, i in 1:nx
+        ip = Common.periodic_right_index(i, nx)
+        im = Common.periodic_left_index(i, nx)
+        jp = Common.periodic_right_index(j, ny)
+        jm = Common.periodic_left_index(j, ny)
+
+        u = uold[i, j]
+        v = vold[i, j]
+
+        dux_u = u >= 0 ? (uold[i, j] - uold[im, j]) / dx :
+            (uold[ip, j] - uold[i, j]) / dx
+        duy_u = v >= 0 ? (uold[i, j] - uold[i, jm]) / dy :
+            (uold[i, jp] - uold[i, j]) / dy
+        lap_u = (uold[ip, j] - 2u + uold[im, j]) * invdx2 +
+            (uold[i, jp] - 2u + uold[i, jm]) * invdy2
+
+        dux_v = u >= 0 ? (vold[i, j] - vold[im, j]) / dx :
+            (vold[ip, j] - vold[i, j]) / dx
+        duy_v = v >= 0 ? (vold[i, j] - vold[i, jm]) / dy :
+            (vold[i, jp] - vold[i, j]) / dy
+        lap_v = (vold[ip, j] - 2v + vold[im, j]) * invdx2 +
+            (vold[i, jp] - 2v + vold[i, jm]) * invdy2
+
+        unew[i, j] = u - dt * (u * dux_u + v * duy_u) + nu * dt * lap_u
+        vnew[i, j] = v - dt * (u * dux_v + v * duy_v) + nu * dt * lap_v
+    end
+
+    (; u=unew, v=vnew)
 end
 end

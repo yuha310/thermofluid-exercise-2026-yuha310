@@ -13,12 +13,12 @@ include("analyze.jl")
     bc = N.channel_boundaries(:dirichlet)
     f = N.flux_buffers(a)
     @test N.thermal_stable_timestep(1., 0., 0.05, 0.5, 0.25, bc)≈0.8 / 5.0
-    @test N.thermal_fluxes!(f, a, 0.5, 0.25; cx = 1., cy = 0., kappa = 0.05, bc)===f
+    @test N.thermal_fluxes!(f, a, 0.5, 0.25; cx=1., cy=0., kappa=0.05, bc)===f
     @test f.adv_x == [1 1 1 1; 1 2 4 3; 5 7 6 8; 9 10 12 11]
     @test f.diff_x≈[0 -0.2 -0.6 -0.4; -0.4 -0.5 -0.2 -0.5; -0.4 -0.3 -0.6 -0.3; 0 0 0 0]
     @test f.adv_y == zeros(3, 5)
     @test f.diff_y≈[-0.4 -0.2 -0.4 0.2 1.2; -2 -0.4 0.2 -0.4 3.2; -3.6 -0.2 -0.4 0.2 4.4]
-    r = N.thermal_step!(b, a, 0.01, 0.5, 0.25; cx = 1., cy = 0., kappa = 0.05, bc)
+    r = N.thermal_step!(b, a, 0.01, 0.5, 0.25; cx=1., cy=0., kappa=0.05, bc)
     @test r.temperature===b
     @test collect(r.boundary_rates.advective) == [1., -10.5, 0., 0.]
     @test collect(r.boundary_rates.diffusive)≈[-0.3, 0., -3., -4.4]
@@ -33,7 +33,7 @@ include("analyze.jl")
         u = copy(a)
         v = similar(u)
         for _ in 1:20
-            r = N.thermal_step!(v, u, 0.01, 0.5, 0.25; cx = 1., cy = 0., kappa = 0.05, bc)
+            r = N.thermal_step!(v, u, 0.01, 0.5, 0.25; cx=1., cy=0., kappa=0.05, bc)
             rates = r.boundary_rates
             total+=0.01 * (sum(rates.advective) + sum(rates.diffusive))
             u, v = v, u
@@ -43,16 +43,16 @@ include("analyze.jl")
             @test r.boundary_rates.diffusive.south == r.boundary_rates.diffusive.north == 0.
     end
     for kind in (:periodic, :insulated, :dirichlet)
-        bc = N.boundaries(kind; value = kind == :dirichlet ? 2. : 0.)
+        bc = N.boundaries(kind; value=kind == :dirichlet ? 2. : 0.)
         N.thermal_step!(
             b,
             fill(2., 3, 4),
             0.01,
             0.5,
             0.25;
-            cx = 0.,
-            cy = 0.,
-            kappa = 0.05,
+            cx=0.,
+            cy=0.,
+            kappa=0.05,
             bc,
         )
         @test b≈fill(2., 3, 4)
@@ -61,7 +61,7 @@ include("analyze.jl")
     bound = 1 / (0.05 * (3 / 0.5 ^ 2 + 3 / 0.25 ^ 2))
     impulse = zeros(3, 4)
     impulse[1, 1] = 1.
-    N.thermal_step!(b, impulse, bound, 0.5, 0.25; cx = 0., cy = 0., kappa = 0.05, bc)
+    N.thermal_step!(b, impulse, bound, 0.5, 0.25; cx=0., cy=0., kappa=0.05, bc)
     @test minimum(b) >= -1e-15
     fill!(b, -99.)
     @test_throws ArgumentError N.thermal_step!(
@@ -70,9 +70,9 @@ include("analyze.jl")
         bound * (1 + 1e-8),
         0.5,
         0.25;
-        cx = 0.,
-        cy = 0.,
-        kappa = 0.05,
+        cx=0.,
+        cy=0.,
+        kappa=0.05,
         bc,
     )
     @test all(==(-99.), b)
@@ -82,9 +82,9 @@ include("analyze.jl")
         1 / (0.1 * (1 / 0.5 ^ 2 + 1 / 0.25 ^ 2)),
         0.5,
         0.25;
-        cx = 0.,
-        cy = 0.,
-        kappa = 0.05,
+        cx=0.,
+        cy=0.,
+        kappa=0.05,
         bc,
     )
     # Signed periodic flow at both ends, old-state use and heat cancellation.
@@ -126,12 +126,12 @@ end
     @test u == originals[1] && v == originals[2]
     @test N.burgers_stable_timestep(u, v, nu, dx, dy)≈0.8 / (9.0 + 2.0)
     @test N.burgers_stable_timestep(2u, 2v, nu, dx, dy) <
-          N.burgers_stable_timestep(u, v, nu, dx, dy)
+        N.burgers_stable_timestep(u, v, nu, dx, dy)
     a = fill(2., 3, 4)
     b = fill(-1., 3, 4)
-    N.burgers_step!(un, vn, a, b, 0.001, dx, dy; nu = 0.)
+    N.burgers_step!(un, vn, a, b, 0.001, dx, dy; nu=0.)
     @test un == a && vn == b
-    N.burgers_step!(un, vn, u, zeros(3, 4), dt, dx, dy; nu = 0.)
+    N.burgers_step!(un, vn, u, zeros(3, 4), dt, dx, dy; nu=0.)
     @test all(iszero, vn)
     arrays = [copy(u) for _ in 1:4]
     for (i, j) in ((1, 3), (1, 2))
@@ -166,11 +166,216 @@ end
 @testset "N07 自作: 開境界2条件の辺別熱収支" begin
     # TODO(自作): 複数ステップで辺別・移流/拡散別の積算、熱量変化、断熱壁を検証する。
     # 入力と独立期待値、許容値の根拠を記す。公式出力は上書きしない。
-    @test false
+    dt = 0.01
+    dx = 0.5
+    dy = 0.25
+    nx, ny = 3, 4
+
+    for wall in (:dirichlet, :insulated)
+        bc = N.channel_boundaries(wall)
+
+        u = fill(0.2, nx, ny)
+        v = similar(u)
+        q0 = dx * dy * sum(u)
+        total = 0.0
+
+        r = nothing
+
+        for _ in 1:20
+            r = N.thermal_step!(
+                v,
+                u,
+                dt,
+                dx,
+                dy;
+                cx=1.0,
+                cy=0.0,
+                kappa=0.05,
+                bc,
+            )
+
+            rates = r.boundary_rates
+            total += dt * (
+                sum(rates.advective) +
+                    sum(rates.diffusive)
+            )
+
+            u, v = v, u
+        end
+
+        @test dx * dy * sum(u) - q0 ≈ total atol=1e-12
+
+        if wall == :insulated
+            @test r.boundary_rates.diffusive.south == 0.0
+            @test r.boundary_rates.diffusive.north == 0.0
+        end
+    end
+    bc = N.channel_boundaries(:dirichlet)
+
+    u = fill(0.2, 3, 4)
+    v = similar(u)
+
+    r = N.thermal_step!(
+        v,
+        u,
+        0.01,
+        0.5,
+        0.25;
+        cx=1.0,
+        cy=0.0,
+        kappa=0.05,
+        bc,
+    )
+
+    @test r.boundary_rates.advective.west ≈ 1.0
+    @test r.boundary_rates.advective.east ≈ -0.2
+    @test r.boundary_rates.diffusive.west ≈ 0.16
+    @test r.boundary_rates.diffusive.south ≈ -0.12
+    @test r.boundary_rates.diffusive.north ≈ -0.12
 end
 @testset "N07 自作: 温度とBurgersの解析解収束" begin
     # TODO(自作): 周期温度の拡散・合成と二成分Burgersを3格子で計算し、誤差と両区間の次数を検証する。
-    @test false
+    t_final = 1.0
+
+    for id in PERIODIC_CASES
+        c = thermal_config(id)
+        errors = Float64[]
+
+        for (nx, ny) in OFFICIAL_GRIDS
+            dx = 2.0 / nx
+            dy = 1.0 / ny
+            x = cell_centers(nx, 2.0)
+            y = cell_centers(ny, 1.0)
+
+            temperature = exact_temperature(x, y, 0.0, id)
+            next_temperature = similar(temperature)
+
+            t = 0.0
+            while t < t_final
+                dt_max = N.thermal_stable_timestep(
+                    c.cx,
+                    c.cy,
+                    c.kappa,
+                    dx,
+                    dy,
+                    c.bc;
+                    safety=0.8,
+                )
+                dt = min(dt_max, t_final - t)
+
+                N.thermal_step!(
+                    next_temperature,
+                    temperature,
+                    dt,
+                    dx,
+                    dy;
+                    cx=c.cx,
+                    cy=c.cy,
+                    kappa=c.kappa,
+                    bc=c.bc,
+                )
+
+                temperature, next_temperature =
+                    next_temperature, temperature
+                t += dt
+            end
+
+            exact = exact_temperature(
+                x,
+                y,
+                t_final,
+                id,
+            )
+            error = sqrt(
+                sum((temperature .- exact) .^ 2) / (nx * ny)
+            )
+            push!(errors, error)
+        end
+
+        @test issorted(errors; rev=true)
+
+        p12 = log2(errors[1] / errors[2])
+        p23 = log2(errors[2] / errors[3])
+
+        if id == "periodic_diffusion"
+            @test 1.8 <= p12 <= 2.2
+            @test 1.8 <= p23 <= 2.2
+        else
+            @test 0.8 <= p12 <= 1.2
+            @test 0.8 <= p23 <= 1.2
+        end
+    end
+
+    burgers_errors = Float64[]
+
+    for (nx, ny) in OFFICIAL_GRIDS
+        dx = 2.0 / nx
+        dy = 1.0 / ny
+        x = cell_centers(nx, 2.0)
+        y = cell_centers(ny, 1.0)
+
+        u, v = exact_burgers(
+            x,
+            y,
+            0.0;
+            nu=0.05,
+        )
+        next_u = similar(u)
+        next_v = similar(v)
+
+        t = 0.0
+        while t < t_final
+            dt_max = N.burgers_stable_timestep(
+                u,
+                v,
+                0.05,
+                dx,
+                dy;
+                safety=0.8,
+            )
+            dt = min(dt_max, t_final - t)
+
+            N.burgers_step!(
+                next_u,
+                next_v,
+                u,
+                v,
+                dt,
+                dx,
+                dy;
+                nu=0.05,
+            )
+
+            u, next_u = next_u, u
+            v, next_v = next_v, v
+            t += dt
+        end
+
+        exact_u, exact_v = exact_burgers(
+            x,
+            y,
+            t_final;
+            nu=0.05,
+        )
+
+        error = sqrt(
+            sum(
+                (u .- exact_u) .^ 2 +
+                    (v .- exact_v) .^ 2
+            ) / (nx * ny)
+        )
+        push!(burgers_errors, error)
+    end
+
+    @test issorted(burgers_errors; rev=true)
+
+    burgers_p12 =
+        log2(burgers_errors[1] / burgers_errors[2])
+    burgers_p23 =
+        log2(burgers_errors[2] / burgers_errors[3])
+
+    @test 0.8 <= burgers_p12 <= 1.2
+    @test 0.8 <= burgers_p23 <= 1.2
 end
 @testset "N07 保存結果と来歴" begin
     @test check_complete()
